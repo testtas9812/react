@@ -24,6 +24,7 @@ import {
   ElementTypeRoot,
   ElementTypeSuspense,
   ElementTypeSuspenseList,
+  StrictMode,
 } from 'react-devtools-shared/src/types';
 import {
   deletePathInObject,
@@ -52,6 +53,7 @@ import {
   TREE_OPERATION_REMOVE,
   TREE_OPERATION_REMOVE_ROOT,
   TREE_OPERATION_REORDER_CHILDREN,
+  TREE_OPERATION_SET_SUBTREE_MODE,
   TREE_OPERATION_UPDATE_ERRORS_OR_WARNINGS,
   TREE_OPERATION_UPDATE_TREE_BASE_DURATION,
 } from '../constants';
@@ -82,10 +84,15 @@ import {
   MEMO_SYMBOL_STRING,
 } from './ReactSymbols';
 import {format} from './utils';
-import {enableProfilerChangedHookIndices} from 'react-devtools-feature-flags';
+import {
+  enableProfilerChangedHookIndices,
+  enableStyleXFeatures,
+} from 'react-devtools-feature-flags';
 import is from 'shared/objectIs';
 import isArray from 'shared/isArray';
 import hasOwnProperty from 'shared/hasOwnProperty';
+import {getStyleXData} from './StyleX/utils';
+import {createProfilingHooks} from './profilingHooks';
 
 import type {Fiber} from 'react-reconciler/src/ReactInternalTypes';
 import type {
@@ -108,6 +115,7 @@ import type {
 import type {
   ComponentFilter,
   ElementType,
+  Plugins,
 } from 'react-devtools-shared/src/types';
 
 type getDisplayNameForFiberType = (fiber: Fiber) => string | null;
@@ -150,6 +158,7 @@ export function getInternalReactConstants(
   ReactPriorityLevels: ReactPriorityLevelsType,
   ReactTypeOfSideEffect: ReactTypeOfSideEffectType,
   ReactTypeOfWork: WorkTagMap,
+  StrictModeBits: number,
 |} {
   const ReactTypeOfSideEffect: ReactTypeOfSideEffectType = {
     DidCapture: 0b10000000,
@@ -185,6 +194,18 @@ export function getInternalReactConstants(
       IdlePriority: 5,
       NoPriority: 0,
     };
+  }
+
+  let StrictModeBits = 0;
+  if (gte(version, '18.0.0-alpha')) {
+    // 18+
+    StrictModeBits = 0b011000;
+  } else if (gte(version, '16.9.0')) {
+    // 16.9 - 17
+    StrictModeBits = 0b1;
+  } else if (gte(version, '16.3.0')) {
+    // 16.3 - 16.8
+    StrictModeBits = 0b10;
   }
 
   let ReactTypeOfWork: WorkTagMap = ((null: any): WorkTagMap);
@@ -508,6 +529,7 @@ export function getInternalReactConstants(
     ReactPriorityLevels,
     ReactTypeOfWork,
     ReactTypeOfSideEffect,
+    StrictModeBits,
   };
 }
 
@@ -529,6 +551,7 @@ export function attach(
     ReactPriorityLevels,
     ReactTypeOfWork,
     ReactTypeOfSideEffect,
+    StrictModeBits,
   } = getInternalReactConstants(version);
   const {
     DidCapture,
@@ -568,6 +591,8 @@ export function attach(
   } = ReactPriorityLevels;
 
   const {
+    getLaneLabelMap,
+    injectProfilingHooks,
     overrideHookState,
     overrideHookStateDeletePath,
     overrideHookStateRenamePath,
@@ -600,6 +625,16 @@ export function attach(
         return scheduleRefresh(...args);
       }
     };
+  }
+
+  if (typeof injectProfilingHooks === 'function') {
+    injectProfilingHooks(
+      createProfilingHooks({
+        getDisplayNameForFiber,
+        getLaneLabelMap,
+        reactVersion: version,
+      }),
+    );
   }
 
   // Tracks Fibers with recently changed number of error/warning messages.
@@ -1312,11 +1347,19 @@ export function attach(
   // Fibers only store the current context value,
   // so we need to track them separately in order to determine changed keys.
   function crawlToInitializeContextsMap(fiber: Fiber) {
-    updateContextsForFiber(fiber);
-    let current = fiber.child;
-    while (current !== null) {
-      crawlToInitializeContextsMap(current);
-      current = current.sibling;
+    const id = getFiberIDUnsafe(fiber);
+
+    // Not all Fibers in the subtree have mounted yet.
+    // For example, Offscreen (hidden) or Suspense (suspended) subtrees won't yet be tracked.
+    // We can safely skip these subtrees.
+    if (id !== null) {
+      updateContextsForFiber(fiber);
+
+      let current = fiber.child;
+      while (current !== null) {
+        crawlToInitializeContextsMap(current);
+        current = current.sibling;
+      }
     }
   }
 
@@ -1871,7 +1914,9 @@ export function attach(
       pushOperation(TREE_OPERATION_ADD);
       pushOperation(id);
       pushOperation(ElementTypeRoot);
+      pushOperation((fiber.mode & StrictModeBits) !== 0 ? 1 : 0);
       pushOperation(isProfilingSupported ? 1 : 0);
+      pushOperation(StrictModeBits !== 0 ? 1 : 0);
       pushOperation(hasOwnerMetadata ? 1 : 0);
 
       if (isProfiling) {
@@ -1908,6 +1953,16 @@ export function attach(
       pushOperation(ownerID);
       pushOperation(displayNameStringID);
       pushOperation(keyStringID);
+
+      // If this subtree has a new mode, let the frontend know.
+      if (
+        (fiber.mode & StrictModeBits) !== 0 &&
+        (((parentFiber: any): Fiber).mode & StrictModeBits) === 0
+      ) {
+        pushOperation(TREE_OPERATION_SET_SUBTREE_MODE);
+        pushOperation(id);
+        pushOperation(StrictMode);
+      }
     }
 
     if (isProfilingSupported) {
@@ -2539,7 +2594,9 @@ export function attach(
 
   function getUpdatersList(root): Array<SerializedElement> | null {
     return root.memoizedUpdaters != null
-      ? Array.from(root.memoizedUpdaters).map(fiberToSerializedElement)
+      ? Array.from(root.memoizedUpdaters)
+          .filter(fiber => getFiberIDUnsafe(fiber) !== null)
+          .map(fiberToSerializedElement)
       : null;
   }
 
@@ -3234,6 +3291,16 @@ export function attach(
       targetErrorBoundaryID = getNearestErrorBoundaryID(fiber);
     }
 
+    const plugins: Plugins = {
+      stylex: null,
+    };
+
+    if (enableStyleXFeatures) {
+      if (memoizedProps.hasOwnProperty('xstyle')) {
+        plugins.stylex = getStyleXData(memoizedProps.xstyle);
+      }
+    }
+
     return {
       id,
 
@@ -3293,6 +3360,8 @@ export function attach(
       rootType,
       rendererPackageName: renderer.rendererPackageName,
       rendererVersion: renderer.version,
+
+      plugins,
     };
   }
 

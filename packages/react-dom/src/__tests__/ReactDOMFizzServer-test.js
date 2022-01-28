@@ -465,8 +465,7 @@ describe('ReactDOMFizzServer', () => {
     expect(loggedErrors).toEqual([]);
 
     // Attempt to hydrate the content.
-    const root = ReactDOM.createRoot(container, {hydrate: true});
-    root.render(<App isClient={true} />);
+    ReactDOM.hydrateRoot(container, <App isClient={true} />);
     Scheduler.unstable_flushAll();
 
     // We're still loading because we're waiting for the server to stream more content.
@@ -629,8 +628,7 @@ describe('ReactDOMFizzServer', () => {
     expect(loggedErrors).toEqual([]);
 
     // Attempt to hydrate the content.
-    const root = ReactDOM.createRoot(container, {hydrate: true});
-    root.render(<App />);
+    ReactDOM.hydrateRoot(container, <App />);
     Scheduler.unstable_flushAll();
 
     // We're still loading because we're waiting for the server to stream more content.
@@ -701,8 +699,7 @@ describe('ReactDOMFizzServer', () => {
       pipe(writable);
     });
 
-    const root = ReactDOM.createRoot(container, {hydrate: true});
-    root.render(<App showMore={false} />);
+    const root = ReactDOM.hydrateRoot(container, <App showMore={false} />);
     Scheduler.unstable_flushAll();
 
     // We're not hydrated yet.
@@ -769,8 +766,7 @@ describe('ReactDOMFizzServer', () => {
     // We're still showing a fallback.
 
     // Attempt to hydrate the content.
-    const root = ReactDOM.createRoot(container, {hydrate: true});
-    root.render(<App />);
+    ReactDOM.hydrateRoot(container, <App />);
     Scheduler.unstable_flushAll();
 
     // We're still loading because we're waiting for the server to stream more content.
@@ -1459,8 +1455,7 @@ describe('ReactDOMFizzServer', () => {
     // We're still showing a fallback.
 
     // Attempt to hydrate the content.
-    const root = ReactDOM.createRoot(container, {hydrate: true});
-    root.render(<App isClient={true} />);
+    ReactDOM.hydrateRoot(container, <App isClient={true} />);
     Scheduler.unstable_flushAll();
 
     // We're still loading because we're waiting for the server to stream more content.
@@ -1680,19 +1675,25 @@ describe('ReactDOMFizzServer', () => {
 
   // @gate experimental
   it('calls getServerSnapshot instead of getSnapshot', async () => {
+    const ref = React.createRef();
+
     function getServerSnapshot() {
       return 'server';
     }
+
     function getClientSnapshot() {
       return 'client';
     }
+
     function subscribe() {
       return () => {};
     }
+
     function Child({text}) {
       Scheduler.unstable_yieldValue(text);
       return text;
     }
+
     function App() {
       const value = useSyncExternalStore(
         subscribe,
@@ -1700,11 +1701,12 @@ describe('ReactDOMFizzServer', () => {
         getServerSnapshot,
       );
       return (
-        <div>
+        <div ref={ref}>
           <Child text={value} />
         </div>
       );
     }
+
     const loggedErrors = [];
     await act(async () => {
       const {pipe} = ReactDOMFizzServer.renderToPipeableStream(
@@ -1723,14 +1725,29 @@ describe('ReactDOMFizzServer', () => {
 
     ReactDOM.hydrateRoot(container, <App />);
 
-    expect(() => {
-      // The first paint switches to client rendering due to mismatch
+    if (gate(flags => flags.enableClientRenderFallbackOnHydrationMismatch)) {
+      expect(() => {
+        // The first paint switches to client rendering due to mismatch
+        expect(Scheduler).toFlushUntilNextPaint(['client']);
+      }).toErrorDev(
+        'Warning: An error occurred during hydration. The server HTML was replaced with client content',
+        {withoutStack: true},
+      );
+      expect(getVisibleChildren(container)).toEqual(<div>client</div>);
+    } else {
+      const serverRenderedDiv = container.getElementsByTagName('div')[0];
+      // The first paint uses the server snapshot
+      expect(Scheduler).toFlushUntilNextPaint(['server']);
+      expect(getVisibleChildren(container)).toEqual(<div>server</div>);
+      // Hydration succeeded
+      expect(ref.current).toEqual(serverRenderedDiv);
+
+      // Asynchronously we detect that the store has changed on the client,
+      // and patch up the inconsistency
       expect(Scheduler).toFlushUntilNextPaint(['client']);
-    }).toErrorDev(
-      'Warning: An error occurred during hydration. The server HTML was replaced with client content',
-      {withoutStack: true},
-    );
-    expect(getVisibleChildren(container)).toEqual(<div>client</div>);
+      expect(getVisibleChildren(container)).toEqual(<div>client</div>);
+      expect(ref.current).toEqual(serverRenderedDiv);
+    }
   });
 
   // The selector implementation uses the lazy ref initialization pattern
@@ -1790,15 +1807,31 @@ describe('ReactDOMFizzServer', () => {
 
     ReactDOM.hydrateRoot(container, <App />);
 
-    // The first paint uses the client due to mismatch forcing client render
-    expect(() => {
-      // The first paint switches to client rendering due to mismatch
+    if (gate(flags => flags.enableClientRenderFallbackOnHydrationMismatch)) {
+      // The first paint uses the client due to mismatch forcing client render
+      expect(() => {
+        // The first paint switches to client rendering due to mismatch
+        expect(Scheduler).toFlushUntilNextPaint(['client']);
+      }).toErrorDev(
+        'Warning: An error occurred during hydration. The server HTML was replaced with client content',
+        {withoutStack: true},
+      );
+      expect(getVisibleChildren(container)).toEqual(<div>client</div>);
+    } else {
+      const serverRenderedDiv = container.getElementsByTagName('div')[0];
+
+      // The first paint uses the server snapshot
+      expect(Scheduler).toFlushUntilNextPaint(['server']);
+      expect(getVisibleChildren(container)).toEqual(<div>server</div>);
+      // Hydration succeeded
+      expect(ref.current).toEqual(serverRenderedDiv);
+
+      // Asynchronously we detect that the store has changed on the client,
+      // and patch up the inconsistency
       expect(Scheduler).toFlushUntilNextPaint(['client']);
-    }).toErrorDev(
-      'Warning: An error occurred during hydration. The server HTML was replaced with client content',
-      {withoutStack: true},
-    );
-    expect(getVisibleChildren(container)).toEqual(<div>client</div>);
+      expect(getVisibleChildren(container)).toEqual(<div>client</div>);
+      expect(ref.current).toEqual(serverRenderedDiv);
+    }
   });
 
   // @gate experimental

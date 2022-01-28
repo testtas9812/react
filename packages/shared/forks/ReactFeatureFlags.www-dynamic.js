@@ -19,7 +19,6 @@ export const enableFilterEmptyStringAttributesDOM = __VARIANT__;
 export const enableLegacyFBSupport = __VARIANT__;
 export const skipUnmountedBoundaries = __VARIANT__;
 export const enableUseRefAccessWarning = __VARIANT__;
-export const warnAboutCallbackRefReturningFunction = __VARIANT__;
 export const deletedTreeCleanUpLevel = __VARIANT__ ? 3 : 1;
 export const enableProfilerNestedUpdateScheduledHook = __VARIANT__;
 export const disableSchedulerTimeoutInWorkLoop = __VARIANT__;
@@ -28,6 +27,7 @@ export const enableSyncDefaultUpdates = __VARIANT__;
 export const consoleManagedByDevToolsDuringStrictMode = __VARIANT__;
 export const warnOnSubscriptionInsideStartTransition = __VARIANT__;
 export const enableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay = __VARIANT__;
+export const enableClientRenderFallbackOnHydrationMismatch = __VARIANT__;
 
 // Enable this flag to help with concurrent mode debugging.
 // It logs information to the console about React scheduling, rendering, and commit phases.

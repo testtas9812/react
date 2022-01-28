@@ -44,7 +44,11 @@ import {
   isContextProvider as isLegacyContextProvider,
 } from './ReactFiberContext.new';
 import {createFiberRoot} from './ReactFiberRoot.new';
-import {injectInternals, onScheduleRoot} from './ReactFiberDevToolsHook.new';
+import {
+  injectInternals,
+  markRenderScheduled,
+  onScheduleRoot,
+} from './ReactFiberDevToolsHook.new';
 import {
   requestEventTime,
   requestUpdateLane,
@@ -87,7 +91,6 @@ import {
   setRefreshHandler,
   findHostInstancesForRefresh,
 } from './ReactFiberHotReloading.new';
-import {markRenderScheduled} from './SchedulingProfiler';
 import ReactVersion from 'shared/ReactVersion';
 export {registerMutableSourceForHydration} from './ReactMutableSource.new';
 export {createPortal} from './ReactPortal';
@@ -241,6 +244,7 @@ export function createContainer(
   hydrationCallbacks: null | SuspenseHydrationCallbacks,
   isStrictMode: boolean,
   concurrentUpdatesByDefaultOverride: null | boolean,
+  identifierPrefix: string,
 ): OpaqueRoot {
   return createFiberRoot(
     containerInfo,
@@ -249,6 +253,7 @@ export function createContainer(
     hydrationCallbacks,
     isStrictMode,
     concurrentUpdatesByDefaultOverride,
+    identifierPrefix,
   );
 }
 

@@ -8,44 +8,50 @@
  */
 
 import * as React from 'react';
-import {useCallback, useContext, useEffect, useRef} from 'react';
-import {TreeDispatcherContext, TreeStateContext} from './TreeContext';
-import Button from '../Button';
-import ButtonIcon from '../ButtonIcon';
-import Icon from '../Icon';
+import {useEffect, useRef} from 'react';
+import Button from './Button';
+import ButtonIcon from './ButtonIcon';
+import Icon from './Icon';
 
 import styles from './SearchInput.css';
 
-type Props = {||};
+type Props = {|
+  goToNextResult: () => void,
+  goToPreviousResult: () => void,
+  placeholder: string,
+  search: (text: string) => void,
+  searchIndex: number,
+  searchResultsCount: number,
+  searchText: string,
+  testName?: ?string,
+|};
 
-export default function SearchInput(props: Props) {
-  const {searchIndex, searchResults, searchText} = useContext(TreeStateContext);
-  const dispatch = useContext(TreeDispatcherContext);
-
+export default function SearchInput({
+  goToNextResult,
+  goToPreviousResult,
+  placeholder,
+  search,
+  searchIndex,
+  searchResultsCount,
+  searchText,
+  testName,
+}: Props) {
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  const handleTextChange = useCallback(
-    ({currentTarget}) =>
-      dispatch({type: 'SET_SEARCH_TEXT', payload: currentTarget.value}),
-    [dispatch],
-  );
-  const resetSearch = useCallback(
-    () => dispatch({type: 'SET_SEARCH_TEXT', payload: ''}),
-    [dispatch],
-  );
+  const resetSearch = () => search('');
 
-  const handleInputKeyPress = useCallback(
-    ({key, shiftKey}) => {
-      if (key === 'Enter') {
-        if (shiftKey) {
-          dispatch({type: 'GO_TO_PREVIOUS_SEARCH_RESULT'});
-        } else {
-          dispatch({type: 'GO_TO_NEXT_SEARCH_RESULT'});
-        }
+  const handleChange = ({currentTarget}) => {
+    search(currentTarget.value);
+  };
+  const handleKeyPress = ({key, shiftKey}) => {
+    if (key === 'Enter') {
+      if (shiftKey) {
+        goToPreviousResult();
+      } else {
+        goToNextResult();
       }
-    },
-    [dispatch],
-  );
+    }
+  };
 
   // Auto-focus search input
   useEffect(() => {
@@ -53,7 +59,7 @@ export default function SearchInput(props: Props) {
       return () => {};
     }
 
-    const handleWindowKey = (event: KeyboardEvent) => {
+    const handleKeyDown = (event: KeyboardEvent) => {
       const {key, metaKey} = event;
       if (key === 'f' && metaKey) {
         if (inputRef.current !== null) {
@@ -68,33 +74,37 @@ export default function SearchInput(props: Props) {
     // Here we use portals to render individual tabs (e.g. Profiler),
     // and the root document might belong to a different window.
     const ownerDocument = inputRef.current.ownerDocument;
-    ownerDocument.addEventListener('keydown', handleWindowKey);
+    ownerDocument.addEventListener('keydown', handleKeyDown);
 
-    return () => ownerDocument.removeEventListener('keydown', handleWindowKey);
-  }, [inputRef]);
+    return () => ownerDocument.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   return (
-    <div className={styles.SearchInput}>
+    <div className={styles.SearchInput} data-testname={testName}>
       <Icon className={styles.InputIcon} type="search" />
       <input
+        data-testname={testName ? `${testName}-Input` : undefined}
         className={styles.Input}
-        onChange={handleTextChange}
-        onKeyPress={handleInputKeyPress}
-        placeholder="Search (text or /regex/)"
+        onChange={handleChange}
+        onKeyPress={handleKeyPress}
+        placeholder={placeholder}
         ref={inputRef}
         value={searchText}
       />
       {!!searchText && (
         <React.Fragment>
-          <span className={styles.IndexLabel}>
-            {Math.min(searchIndex + 1, searchResults.length)} |{' '}
-            {searchResults.length}
+          <span
+            className={styles.IndexLabel}
+            data-testname={testName ? `${testName}-ResultsCount` : undefined}>
+            {Math.min(searchIndex + 1, searchResultsCount)} |{' '}
+            {searchResultsCount}
           </span>
           <div className={styles.LeftVRule} />
           <Button
+            data-testname={testName ? `${testName}-PreviousButton` : undefined}
             className={styles.IconButton}
             disabled={!searchText}
-            onClick={() => dispatch({type: 'GO_TO_PREVIOUS_SEARCH_RESULT'})}
+            onClick={goToPreviousResult}
             title={
               <React.Fragment>
                 Scroll to previous search result (<kbd>Shift</kbd> +{' '}
@@ -104,9 +114,10 @@ export default function SearchInput(props: Props) {
             <ButtonIcon type="up" />
           </Button>
           <Button
+            data-testname={testName ? `${testName}-NextButton` : undefined}
             className={styles.IconButton}
             disabled={!searchText}
-            onClick={() => dispatch({type: 'GO_TO_NEXT_SEARCH_RESULT'})}
+            onClick={goToNextResult}
             title={
               <React.Fragment>
                 Scroll to next search result (<kbd>Enter</kbd>)
@@ -115,6 +126,7 @@ export default function SearchInput(props: Props) {
             <ButtonIcon type="down" />
           </Button>
           <Button
+            data-testname={testName ? `${testName}-ResetButton` : undefined}
             className={styles.IconButton}
             disabled={!searchText}
             onClick={resetSearch}
