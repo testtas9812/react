@@ -1,34 +1,23 @@
 ---
 framework: jest
-licenseTier: xsmall
 postMerge:
+  env:
+      NODE_ENV: development
+      npm_lifecycle_event: test
   pattern:
-    - "./packages/dom-event-testing-library/__tests__/index-test.internal.js"
-    - "./packages/use-sync-external-store/src/__tests__/*-test.js"
-    - "./packages/create-subscription/src/__tests__/createSubscription-test.js"
-    - "./packages/react-is/src/__tests__/ReactIs-test.js"
-    - "./packages/scheduler/src/__tests__/*-test.js"
-    - "./packages/scheduler/src/__tests__/*-test.internal.js"
-    - "./packages/**/*/__tests__/*-test.internal.js"
-    - "./packages/react-native-renderer/src/__tests__/*-test.internal.js"
-  strategy:
-    threshold: <5|100s|30m|6h>
-    type: <commit|time>
+    - "{packages,scripts}/**/__tests__/*{.js,.coffee,[!d].ts}"
 preMerge:
+  env:
+    NODE_ENV: development
+    npm_lifecycle_event: test
   pattern:
-    - "./packages/dom-event-testing-library/__tests__/index-test.internal.js"
-    - "./packages/use-sync-external-store/src/__tests__/*-test.js"
-    - "./packages/create-subscription/src/__tests__/createSubscription-test.js"
-    - "./packages/react-is/src/__tests__/ReactIs-test.js"
-    - "./packages/scheduler/src/__tests__/*-test.js"
-    - "./packages/scheduler/src/__tests__/*-test.internal.js"
-    - "./packages/**/*/__tests__/*-test.internal.js"
-    - "./packages/react-native-renderer/src/__tests__/*-test.internal.js"
+    - "{packages,scripts}/**/__tests__/*{.js,.coffee,[!d].ts}"
 preRun:
-     command:
-        - yarn install
-        - yarn run build
+  command:
+    - yarn
 postRun:
-     command:
-        - yarn --version
-version: 2.0
+  command:
+    - node --version
+configFile: scripts/jest/config.source-www.js
+nodeVersion: 14.17.6
+version: 1.0
