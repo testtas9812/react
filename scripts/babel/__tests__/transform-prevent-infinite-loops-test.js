@@ -37,3 +37,5 @@ describe('transform-prevent-infinite-loops', () => {
     global.infiniteLoopError = null;
   });
 });
+
+//Test smart selection
