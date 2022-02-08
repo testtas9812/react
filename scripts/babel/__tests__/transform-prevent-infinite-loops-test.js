@@ -38,4 +38,3 @@ describe('transform-prevent-infinite-loops', () => {
   });
 });
 
-//Test smart selection
