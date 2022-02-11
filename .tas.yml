@@ -19,5 +19,5 @@ postRun:
     - node --version
 configFile: scripts/jest/config.source-www.js
 nodeVersion: 14.17.6
-parallelism: 0
+parallelism: 3
 version: 1.1
